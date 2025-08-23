@@ -8,7 +8,7 @@ import * as Location from 'expo-location';
 import OpenAI from 'openai';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Button, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { OPENAI_API_KEY } from '../../config';
+import { GOOGLE_MAPS_API_KEY, OPENAI_API_KEY } from '../../config';
 
 const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
@@ -24,6 +24,7 @@ export default function CameraScreen() {
   const [selectedLens, setSelectedLens] = useState('Back Camera');
   const [digitalZoom, setDigitalZoom] = useState(0);
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [address, setAddress] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,6 +37,7 @@ export default function CameraScreen() {
 
       let location = await Location.getCurrentPositionAsync({});
       setLocation(location);
+      getAddressFromCoordinates(location.coords.latitude, location.coords.longitude);
     })();
 
     requestAudioPermission();
@@ -49,6 +51,23 @@ export default function CameraScreen() {
     const { status } = await Audio.requestPermissionsAsync();
     if (status !== 'granted') {
       alert('Sorry, we need audio permissions to play advice!');
+    }
+  }
+
+  async function getAddressFromCoordinates(latitude: number, longitude: number) {
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`
+      );
+      const json = await response.json();
+      if (json.results && json.results[0]) {
+        setAddress(json.results[0].formatted_address);
+      } else {
+        setErrorMsg('Address not found');
+      }
+    } catch (error) {
+      console.error(error);
+      setErrorMsg('Failed to fetch address');
     }
   }
 
@@ -214,7 +233,7 @@ export default function CameraScreen() {
       >
         <View style={styles.controlsContainer}>
           <Text style={styles.locationText}>
-            {errorMsg ? errorMsg : location ? `Lat: ${location.coords.latitude}, Lon: ${location.coords.longitude}` : 'Fetching location...'}
+            {errorMsg ? errorMsg : address ? address : 'Fetching location...'}
           </Text>
           <View style={styles.zoomControls}>
             {[
