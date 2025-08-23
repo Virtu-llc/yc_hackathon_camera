@@ -201,10 +201,12 @@ export default function CameraScreen() {
         You are a photography assistant. The user is currently at ${currentAddress}. Here are the attractions nearby: ${attractionsText}.
         Based on the provided image, reason about the EXACT location the user is at, what the user is wearing, how's the weather, greet them and suggest a few interesting photo opportunities or beautiful scenes nearby, starting from the current place they are at. 
         - Be specific about the current location the user is at, Be exact about how many photos they can take and what they can capture.
+        - Be specific about the time in minutes it takes to walk to each location, and the kind of portriats they can take there.
+        - Be specific about the current location the user is at, and the detailed description of the current frame.
         - Be enthusiastic and encouraging, appreciating the users's current setting and outfit.
         - Encourage the user to start taking photos right away at the current location.
-        - Keep your response concise and friendly, under 150 words.
-        - For example: 'Such an iconic cloudy day at the Eiffel Tower! With your hat, scarf, and black coat, you’re perfectly styled for moody cinematic photos that glow in soft light. Based on this vibe, you can capture around 4 breathtaking shots within the next 20 minutes—Trocadéro (5 min walk), Avenue de Camoëns (just 2 min away), Bir-Hakeim Bridge (10 min stroll), and Quai Branly by the Seine (3 min). These four stops offer sweeping panoramas, chic Parisian streets, dramatic cinematic lines, and soft river reflections, all in a short loop. Let's start with your current location! Can you start pointing your camera at the gorgeous subject?'`;
+        - Keep your response concise and friendly, under 100 words.
+        - For example: 'Such an iconic cloudy day at the Eiffel Tower! You are right in front of the tower, but a bit far from it, with your hat, scarf, and black coat, you’re perfectly styled for moody cinematic photos that glow in soft light. Based on this vibe, you can capture around 4 breathtaking shots within the next 20 minutes—Trocadéro (5 min walk), Avenue de Camoëns (just 2 min away), Bir-Hakeim Bridge (10 min stroll), and Quai Branly by the Seine (3 min). These four stops offer sweeping panoramas, chic Parisian streets, dramatic cinematic lines, and soft river reflections, all in a short loop. Let's start with your current location! Can you start pointing your camera at the gorgeous subject?'`;
 
         console.log("Calling GPT for welcome message with image...");
         const response = await openai.chat.completions.create({
@@ -257,7 +259,7 @@ export default function CameraScreen() {
     if (cameraRef.current) {
       try {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        
+
         const photo = await cameraRef.current.takePictureAsync({
           quality: 1,
           base64: false,
@@ -294,7 +296,10 @@ export default function CameraScreen() {
     suggestionAbortController.current = new AbortController();
 
     try {
-      const photo = await cameraRef.current?.takePictureAsync({ quality: 0.5, base64: true });
+      const photo = await cameraRef.current?.takePictureAsync({
+        quality: 0.5,
+        base64: true,
+      });
       if (!photo || isTaskCancelled.current) return;
 
       const base64 = photo.base64;
@@ -305,7 +310,7 @@ export default function CameraScreen() {
         You are a friendly and encouraging photography assistant. Analyze the current frame, check if it's of good {Scene Background, Distance, Lighting, Composition, Pose, Lens/Distance, Trend-Scout) and provide a very short, clear, directional instruction to improve it. If all the aspects are great and the photo looks of good quality, just say 'Perfect! Hold still and shoot now!'.
         - Don't be too harsh or negative, always be positive and encouraging.
         - Encourage the user to take the photo right away if the current frame is good.
-        - Always apply a template of action + photograph technical effect + aesthetic reason.
+        - Always apply a template of short description of the current frame and what type of photo you should take + why the current photo doesn't meet criteria + action + photograph technical effect + aesthetic reason.
         - Use professional photography suggestions:
           - Scene Background: Suggest changing location or angle for better background, detect if the background has distractions like trashbins, poles, photobombers, etc.
           - Distance: Suggest moving closer or further for better framing of the subject.
@@ -314,26 +319,29 @@ export default function CameraScreen() {
           - Pose: Suggest changing pose or expression for better subject appearance.
           - Lens/Distance: Suggest changing lens or distance for better perspective.
           - Trend-Scout: Suggest incorporating current photography trends for a modern look.
-        - Your response must be under 15 words, and be extremely specific and actionable with numbers like degrees, steps, distance, etc. 
-        - Examples are: 'Move two steps right, remove bin, keep scene clean.', 'Tilt camera down 10°, shrink model's face, refine proportions.', 'Zoom in to 2x, compress view, bring model closer to scenery.', 'Turn model 15° left, adjust angles, look slimmer.', 'Place feet on bottom line, stretch frame, make model look taller.', 'Perfect! Hold still and shoot now!';
+        - Your response must be under 20 words, and be extremely specific and actionable with numbers like degrees, steps, distance, etc. 
+        - Examples are: 'This is a good place to take a portrait with the red block building behind, with the boy in white on the street, but there's a bin in the scene. Move two steps right, keep scene clean.', 'You are taking a close up portrait for a beautiful girl, but the angle is not showing her sharp face countour. Tilt camera down 10°, shrink model's face, refine proportions.', 'You are taking a scenetic photo with the sea and mountain lines behind, Zoom in to 2x, compress view, bring model closer to scenery.', 'You are taking a semi body photo for the beautiful girl sitting on the chair, but her pose are too flat, let her turn 15° left, cross hands to form a triangle, adjust angles, look slimmer.', 'You are taking a full body photo for this girl, but this angle is compressing her heights, try place her feet on bottom line, stretch frame, make model look taller.', 'Perfect! Hold still and shoot now!';
         `;
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64}`,
+      const response = await openai.chat.completions.create(
+        {
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: prompt },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:image/jpeg;base64,${base64}`,
+                  },
                 },
-              },
-            ],
-          },
-        ],
-      }, { signal: suggestionAbortController.current.signal });
+              ],
+            },
+          ],
+        },
+        { signal: suggestionAbortController.current.signal }
+      );
 
       setIsWaitingForAI(false);
 
@@ -344,10 +352,10 @@ export default function CameraScreen() {
         await textToSpeechAndPlay(suggestion);
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.log('OpenAI request was aborted.');
+      if (error instanceof Error && error.name === "AbortError") {
+        console.log("OpenAI request was aborted.");
       } else {
-        console.error('Error with Coach:', error);
+        console.error("Error with Coach:", error);
       }
       setIsWaitingForAI(false);
     } finally {
