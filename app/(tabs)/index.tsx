@@ -114,7 +114,12 @@ export default function CameraScreen() {
         if (attractions.length > 0) {
           attractionsText = `Nearby tourist attractions include: ${attractions.join(', ')}.`;
         }
-        const prompt = `You are a photography assistant. The user is currently at ${currentAddress}. ${attractionsText} Based on the provided image, greet them and suggest a few interesting photo opportunities or beautiful scenes nearby. Keep your response concise and friendly, under 30 words. For example: 'Welcome to the Eiffel Tower! Try capturing it from the Champ de Mars for a classic shot.'`;
+        const prompt = `
+        You are a photography assistant. The user is currently at ${currentAddress}. Here are the attractions nearby: ${attractionsText}.
+        Based on the provided image, reason about the EXACT location the user is at, what the user is wearing, how's the weather, greet them and suggest a few interesting photo opportunities or beautiful scenes nearby, starting from the current place they are at. 
+        - Be specific about the current location the user is at, Be exact about how many photos they can take and what they can capture.
+        - Keep your response concise and friendly, under 200 words.
+        - For example: 'Such an iconic cloudy day at the Eiffel Tower! With your hat, scarf, and black coat, you’re perfectly styled for moody cinematic photos that glow in soft light. Based on this vibe, you can capture around 4 breathtaking shots within the next 20 minutes—Trocadéro (5 min walk), Avenue de Camoëns (just 2 min away), Bir-Hakeim Bridge (10 min stroll), and Quai Branly by the Seine (3 min). These four stops give you sweeping panoramas, chic Parisian streets, dramatic cinematic lines, and soft river reflections all in a short loop. From there, the journey flows naturally: Passerelle Debilly for romantic evening portraits, Champ de Mars for candid lawn moments, Pont Alexandre III for golden elegance, Luxembourg Gardens for dreamy garden frames, Palais Royal for modern chic style, and Montmartre & Sacré-Cœur for that artsy bohemian finale. Let’s make all ten frames as beautiful and effortless as you are—shall we start?'`;
 
         console.log('Calling GPT for welcome message with image...');
         const response = await openai.chat.completions.create({
