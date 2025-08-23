@@ -478,6 +478,12 @@ export default function CameraScreen() {
         selectedLens={Platform.OS === 'ios' ? selectedLens : undefined}
         onMountError={(e) => console.error(e.message)}
       >
+        <View style={styles.gridOverlay}>
+          <View style={styles.gridLine} />
+          <View style={[styles.gridLine, { top: '66.67%' }]} />
+          <View style={[styles.gridLine, styles.verticalGridLine, { left: '33.33%' }]} />
+          <View style={[styles.gridLine, styles.verticalGridLine, { left: '66.67%' }]} />
+        </View>
         <View style={styles.controlsContainer}>
           <Text style={styles.locationText}>
             {errorMsg ? errorMsg : address ? address : 'Fetching location...'}
@@ -640,4 +646,25 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'white',
   },
+  gridOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
+  },
+  gridLine: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    height: 1,
+    width: '100%',
+    top: '33.33%',
+  },
+  verticalGridLine: {
+    height: '100%',
+    width: 1,
+    top: 0,
+  },
+
 });
