@@ -69,8 +69,14 @@ export default function CameraScreen() {
   }, [address, touristAttractions]);
 
   useEffect(() => {
+    // Do not start stability check until the welcome message has finished playing.
+    if (isWelcomeMessagePlaying) {
+      return;
+    }
+
     const checkStability = async () => {
-      if (!cameraRef.current || isSuggestionTaskRunning || isProcessing || isWaitingForAI || isGeneratingWelcomeMessage || isWelcomeMessagePlaying) {
+      // Re-check conditions that might have changed, like another suggestion starting.
+      if (!cameraRef.current || isSuggestionTaskRunning || isProcessing || isWaitingForAI || isGeneratingWelcomeMessage) {
         return;
       }
 
@@ -82,30 +88,31 @@ export default function CameraScreen() {
         if (fileInfo.exists && typeof fileInfo.size === 'number') {
           const currentSize = fileInfo.size;
           
-          if (lastImageSize !== null) {
-            const sizeDifference = Math.abs(currentSize - lastImageSize) / lastImageSize;
-            if (sizeDifference < 0.05) { // 5% threshold for similarity
-              setStableCount(prev => prev + 1);
-            } else {
-              if (stableCount > 0) {
-                 setStableCount(0);
-              }
-              if (isSuggestionTaskRunning) {
-                  isTaskCancelled.current = true;
-                  if (suggestionAbortController.current) {
-                      suggestionAbortController.current.abort();
-                  }
-                  if (soundRef.current) {
-                      await soundRef.current.stopAsync();
-                      await soundRef.current.unloadAsync();
-                      soundRef.current = null;
-                  }
-                  setIsSuggestionTaskRunning(false);
-                  console.log('Task cancelled due to camera movement.');
+          setLastImageSize(lastSize => {
+            if (lastSize !== null) {
+              const sizeDifference = Math.abs(currentSize - lastSize) / lastSize;
+              if (sizeDifference < 0.05) { // 5% threshold for similarity
+                setStableCount(prev => prev + 1);
+              } else {
+                setStableCount(0);
+                if (isSuggestionTaskRunning) {
+                    isTaskCancelled.current = true;
+                    if (suggestionAbortController.current) {
+                        suggestionAbortController.current.abort();
+                    }
+                    if (soundRef.current) {
+                        soundRef.current.stopAsync().then(() => {
+                          soundRef.current?.unloadAsync();
+                          soundRef.current = null;
+                        });
+                    }
+                    setIsSuggestionTaskRunning(false);
+                    console.log('Task cancelled due to camera movement.');
+                }
               }
             }
-          }
-          setLastImageSize(currentSize);
+            return currentSize;
+          });
         }
       } catch (error) {
         if (error instanceof Error && error.message.includes('permission')) {
@@ -119,10 +126,10 @@ export default function CameraScreen() {
     const intervalId = setInterval(checkStability, 1000);
 
     return () => clearInterval(intervalId);
-  }, [lastImageSize, stableCount, isSuggestionTaskRunning, isProcessing, isWaitingForAI, isGeneratingWelcomeMessage, isWelcomeMessagePlaying]);
+  }, [isWelcomeMessagePlaying, isSuggestionTaskRunning, isProcessing, isWaitingForAI, isGeneratingWelcomeMessage]);
 
   useEffect(() => {
-    if (stableCount >= 2 && !isSuggestionTaskRunning && !hasPlayedWelcomeMessage.current) {
+    if (stableCount >= 2 && !isSuggestionTaskRunning) {
       console.log('Camera is stable. Triggering suggestion task.');
       handleCoachPress();
     }
@@ -439,9 +446,6 @@ export default function CameraScreen() {
 
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.shutterButton} onPress={handleCapturePhoto} />
-        <TouchableOpacity style={styles.coachButton} onPress={handleCoachPress} disabled={isProcessing || isWelcomeMessagePlaying || isSuggestionTaskRunning}>
-          <Text style={styles.coachButtonText}>?</Text>
-        </TouchableOpacity>
       </View>
 
       <Animated.View style={[styles.flash, { opacity: flashOpacity }]} />
@@ -520,18 +524,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderWidth: 4,
     borderColor: '#ccc',
-  },
-  coachButton: {
-    position: 'absolute',
-    right: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  coachButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
   },
   loadingOverlay: {
     position: 'absolute',
