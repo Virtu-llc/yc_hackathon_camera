@@ -374,7 +374,8 @@ export default function CameraScreen() {
                 image_url: {
                   url: `data:image/jpeg;base64,${base64}`,
                 },
-              ],
+              },
+            ],
             },
           ],
         },
