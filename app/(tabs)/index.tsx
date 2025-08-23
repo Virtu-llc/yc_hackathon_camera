@@ -5,10 +5,11 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
+import { Link } from 'expo-router';
 import OpenAI from 'openai';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Button, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { GOOGLE_MAPS_API_KEY, OPENAI_API_KEY } from '../../config';
+import { Animated, Button, Dimensions, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { GOOGLE_MAPS_API_KEY, GOOGLE_SEARCH_API_KEY, GOOGLE_SEARCH_CX, OPENAI_API_KEY } from '../../config';
 
 const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
@@ -30,6 +31,8 @@ export default function CameraScreen() {
   const [touristAttractions, setTouristAttractions] = useState<string[]>([]);
   const hasPlayedWelcomeMessage = useRef(false);
   const [isWelcomeMessagePlaying, setIsWelcomeMessagePlaying] = useState(true);
+  const [hasSearchedImages, setHasSearchedImages] = useState(false);
+  const [instagramImages, setInstagramImages] = useState<{ [key: string]: { imageUrl: string; instagramLink: string }[] }>({});
 
   // For auto-coach functionality
   const [lastImageSize, setLastImageSize] = useState<number | null>(null);
@@ -66,7 +69,11 @@ export default function CameraScreen() {
       generateAndPlayWelcomeMessage(address, touristAttractions);
       hasPlayedWelcomeMessage.current = true;
     }
-  }, [address, touristAttractions]);
+    if (touristAttractions.length > 0 && !hasSearchedImages) {
+      searchInstagramImages(touristAttractions);
+      setHasSearchedImages(true);
+    }
+  }, [address, touristAttractions, hasSearchedImages]);
 
   useEffect(() => {
     // Do not start stability check until the welcome message has finished playing.
@@ -143,6 +150,34 @@ export default function CameraScreen() {
     }
   }
 
+  async function searchInstagramImages(attractions: string[]) {
+    console.log('Searching for Instagram images of:', attractions);
+    const allImages: { [key: string]: { imageUrl: string; instagramLink: string }[] } = {};
+    for (const attraction of attractions) {
+      try {
+        const query = `"${attraction}"`;
+        const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_SEARCH_API_KEY}&cx=${GOOGLE_SEARCH_CX}&q=${encodeURIComponent(query)}&searchType=image&siteSearch=instagram.com&fields=items(link,image)`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.items) {
+          const imageData = data.items.map((item: any) => ({
+            imageUrl: item.image?.thumbnailLink || item.link,
+            instagramLink: item.link
+          }));
+          console.log(`Image data for ${attraction}:`, imageData);
+          allImages[attraction] = imageData;
+        } else {
+          console.log(`No images found for ${attraction} on Instagram.`);
+        }
+      } catch (error) {
+        console.error(`Failed to search images for ${attraction}`, error);
+      }
+    }
+    setInstagramImages(allImages);
+  }
+
   async function getTouristAttractions(latitude: number, longitude: number) {
     try {
       const response = await fetch(
@@ -197,6 +232,7 @@ export default function CameraScreen() {
             ", "
           )}.`;
         }
+  
         const prompt = `
         You are a photography assistant. The user is currently at ${currentAddress}. Here are the attractions nearby: ${attractionsText}.
         Based on the provided image, reason about the EXACT location the user is at, what the user is wearing, how's the weather, greet them and suggest a few interesting photo opportunities or beautiful scenes nearby, starting from the current place they are at. 
@@ -209,6 +245,7 @@ export default function CameraScreen() {
         - For example: 'Such an iconic cloudy day at the Eiffel Tower! You are right in front of the tower, but a bit far from it, with your hat, scarf, and black coat, you’re perfectly styled for moody cinematic photos that glow in soft light. Based on this vibe, you can capture around 4 breathtaking shots within the next 20 minutes—Trocadéro (5 min walk), Avenue de Camoëns (just 2 min away), Bir-Hakeim Bridge (10 min stroll), and Quai Branly by the Seine (3 min). These four stops offer sweeping panoramas, chic Parisian streets, dramatic cinematic lines, and soft river reflections, all in a short loop. Let's start with your current location! Can you start pointing your camera at the gorgeous subject?'`;
 
         console.log("Calling GPT for welcome message with image...");
+
         const response = await openai.chat.completions.create({
           model: "gpt-4.1-nano",
           messages: [
@@ -306,6 +343,8 @@ export default function CameraScreen() {
       if (!base64 || isTaskCancelled.current) return;
 
       setIsWaitingForAI(true);
+
+
       const prompt = `
         You are a friendly and encouraging photography assistant. Analyze the current frame, check if it's of good {Scene Background, Distance, Lighting, Composition, Pose, Lens/Distance, Trend-Scout) and provide a very short, clear, directional instruction to improve it. If all the aspects are great and the photo looks of good quality, just say 'Perfect! Hold still and shoot now!'.
         - Don't be too harsh or negative, always be positive and encouraging.
@@ -322,19 +361,18 @@ export default function CameraScreen() {
         - Your response must be under 20 words, and be extremely specific and actionable with numbers like degrees, steps, distance, etc. 
         - Examples are: 'This is a good place to take a portrait with the red block building behind, with the boy in white on the street, but there's a bin in the scene. Move two steps right, keep scene clean.', 'You are taking a close up portrait for a beautiful girl, but the angle is not showing her sharp face countour. Tilt camera down 10°, shrink model's face, refine proportions.', 'You are taking a scenetic photo with the sea and mountain lines behind, Zoom in to 2x, compress view, bring model closer to scenery.', 'You are taking a semi body photo for the beautiful girl sitting on the chair, but her pose are too flat, let her turn 15° left, cross hands to form a triangle, adjust angles, look slimmer.', 'You are taking a full body photo for this girl, but this angle is compressing her heights, try place her feet on bottom line, stretch frame, make model look taller.', 'Perfect! Hold still and shoot now!';
         `;
-      const response = await openai.chat.completions.create(
-        {
-          model: "gpt-4o",
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: prompt },
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: `data:image/jpeg;base64,${base64}`,
-                  },
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4.1-nano',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text:  prompt },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${base64}`,
                 },
               ],
             },
@@ -447,6 +485,9 @@ export default function CameraScreen() {
     );
   }
 
+  const firstAttraction = Object.keys(instagramImages)[0];
+  const thumbnailUrl = firstAttraction ? instagramImages[firstAttraction][0]?.imageUrl : null;
+
   return (
     <View style={styles.container}>
       <CameraView
@@ -457,6 +498,12 @@ export default function CameraScreen() {
         selectedLens={Platform.OS === 'ios' ? selectedLens : undefined}
         onMountError={(e) => console.error(e.message)}
       >
+        <View style={styles.gridOverlay}>
+          <View style={styles.gridLine} />
+          <View style={[styles.gridLine, { top: '66.67%' }]} />
+          <View style={[styles.gridLine, styles.verticalGridLine, { left: '33.33%' }]} />
+          <View style={[styles.gridLine, styles.verticalGridLine, { left: '66.67%' }]} />
+        </View>
         <View style={styles.controlsContainer}>
           <Text style={styles.locationText}>
             {errorMsg ? errorMsg : address ? address : 'Fetching location...'}
@@ -482,7 +529,15 @@ export default function CameraScreen() {
       </CameraView>
 
       <View style={styles.bottomBar}>
+        <View style={styles.buttonContainerPlaceholder} />
         <TouchableOpacity style={styles.shutterButton} onPress={handleCapturePhoto} />
+        <View style={styles.galleryButtonContainer}>
+          {thumbnailUrl && (
+            <Link href={{ pathname: "/gallery", params: { images: JSON.stringify(instagramImages) } }}>
+              <Image source={{ uri: thumbnailUrl }} style={styles.galleryThumbnail} />
+            </Link>
+          )}
+        </View>
       </View>
 
       <Animated.View style={[styles.flash, { opacity: flashOpacity }]} />
@@ -552,7 +607,8 @@ const styles = StyleSheet.create({
     height: bottomBarHeight,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
   },
   shutterButton: {
     width: 70,
@@ -561,6 +617,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderWidth: 4,
     borderColor: '#ccc',
+  },
+  buttonContainerPlaceholder: {
+    width: 50,
+    height: 50,
+  },
+  galleryButtonContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 5,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  galleryThumbnail: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'grey',
   },
   loadingOverlay: {
     position: 'absolute',
@@ -593,4 +666,25 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'white',
   },
+  gridOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
+  },
+  gridLine: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    height: 1,
+    width: '100%',
+    top: '33.33%',
+  },
+  verticalGridLine: {
+    height: '100%',
+    width: 1,
+    top: 0,
+  },
+
 });
