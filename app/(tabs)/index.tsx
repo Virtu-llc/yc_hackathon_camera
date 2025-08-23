@@ -5,9 +5,10 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
+import { Link } from 'expo-router';
 import OpenAI from 'openai';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Button, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Button, Dimensions, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { GOOGLE_MAPS_API_KEY, GOOGLE_SEARCH_API_KEY, GOOGLE_SEARCH_CX, OPENAI_API_KEY } from '../../config';
 
 const openai = new OpenAI({
@@ -31,6 +32,7 @@ export default function CameraScreen() {
   const hasPlayedWelcomeMessage = useRef(false);
   const [isWelcomeMessagePlaying, setIsWelcomeMessagePlaying] = useState(true);
   const [hasSearchedImages, setHasSearchedImages] = useState(false);
+  const [instagramImages, setInstagramImages] = useState<{ [key: string]: { imageUrl: string; instagramLink: string }[] }>({});
 
   // For auto-coach functionality
   const [lastImageSize, setLastImageSize] = useState<number | null>(null);
@@ -150,17 +152,22 @@ export default function CameraScreen() {
 
   async function searchInstagramImages(attractions: string[]) {
     console.log('Searching for Instagram images of:', attractions);
+    const allImages: { [key: string]: { imageUrl: string; instagramLink: string }[] } = {};
     for (const attraction of attractions) {
       try {
         const query = `"${attraction}"`;
-        const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_SEARCH_API_KEY}&cx=${GOOGLE_SEARCH_CX}&q=${encodeURIComponent(query)}&searchType=image&siteSearch=instagram.com&fields=items(link)`;
+        const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_SEARCH_API_KEY}&cx=${GOOGLE_SEARCH_CX}&q=${encodeURIComponent(query)}&searchType=image&siteSearch=instagram.com&fields=items(link,image)`;
         
         const response = await fetch(url);
         const data = await response.json();
         
         if (data.items) {
-          const imageUrls = data.items.map((item: any) => item.link);
-          console.log(`Image URLs for ${attraction}:`, imageUrls);
+          const imageData = data.items.map((item: any) => ({
+            imageUrl: item.image?.thumbnailLink || item.link,
+            instagramLink: item.link
+          }));
+          console.log(`Image data for ${attraction}:`, imageData);
+          allImages[attraction] = imageData;
         } else {
           console.log(`No images found for ${attraction} on Instagram.`);
         }
@@ -168,6 +175,7 @@ export default function CameraScreen() {
         console.error(`Failed to search images for ${attraction}`, error);
       }
     }
+    setInstagramImages(allImages);
   }
 
   async function getTouristAttractions(latitude: number, longitude: number) {
@@ -457,6 +465,9 @@ export default function CameraScreen() {
     );
   }
 
+  const firstAttraction = Object.keys(instagramImages)[0];
+  const thumbnailUrl = firstAttraction ? instagramImages[firstAttraction][0]?.imageUrl : null;
+
   return (
     <View style={styles.container}>
       <CameraView
@@ -492,7 +503,15 @@ export default function CameraScreen() {
       </CameraView>
 
       <View style={styles.bottomBar}>
+        <View style={styles.buttonContainerPlaceholder} />
         <TouchableOpacity style={styles.shutterButton} onPress={handleCapturePhoto} />
+        <View style={styles.galleryButtonContainer}>
+          {thumbnailUrl && (
+            <Link href={{ pathname: "/gallery", params: { images: JSON.stringify(instagramImages) } }}>
+              <Image source={{ uri: thumbnailUrl }} style={styles.galleryThumbnail} />
+            </Link>
+          )}
+        </View>
       </View>
 
       <Animated.View style={[styles.flash, { opacity: flashOpacity }]} />
@@ -562,7 +581,8 @@ const styles = StyleSheet.create({
     height: bottomBarHeight,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
   },
   shutterButton: {
     width: 70,
@@ -571,6 +591,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderWidth: 4,
     borderColor: '#ccc',
+  },
+  buttonContainerPlaceholder: {
+    width: 50,
+    height: 50,
+  },
+  galleryButtonContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 5,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  galleryThumbnail: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'grey',
   },
   loadingOverlay: {
     position: 'absolute',
