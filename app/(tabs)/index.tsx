@@ -42,6 +42,14 @@ export default function CameraScreen() {
   const suggestionAbortController = useRef<AbortController | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
 
+  // Chat history for coach GPT calls
+  const [chatHistory, setChatHistory] = useState<any[]>([]);
+
+  // Function to reset chat history
+  const resetChatHistory = () => {
+    setChatHistory([]);
+  };
+
 
   useEffect(() => {
     (async () => {
@@ -72,6 +80,11 @@ export default function CameraScreen() {
     if (touristAttractions.length > 0 && !hasSearchedImages) {
       searchInstagramImages(touristAttractions);
       setHasSearchedImages(true);
+    }
+    
+    // Reset chat history when location/attractions change significantly
+    if (address || touristAttractions.length > 0) {
+      resetChatHistory();
     }
   }, [address, touristAttractions, hasSearchedImages]);
 
@@ -345,42 +358,53 @@ export default function CameraScreen() {
       setIsWaitingForAI(true);
 
 
-      const prompt = `
-        You are a friendly and encouraging photography assistant. Analyze the current frame, check if it's of good {Scene Background, Distance, Lighting, Composition, Pose, Lens/Distance, Trend-Scout) and provide a very short, clear, directional instruction to improve it. If all the aspects are great and the photo looks of good quality, just say 'Perfect! Hold still and shoot now!'.
-        - Don't be too harsh or negative, always be positive and encouraging.
-        - Encourage the user to take the photo right away if the current frame is good.
-        - Always apply a template of short description of the current frame and what type of photo you should take + why the current photo doesn't meet criteria + action + photograph technical effect + aesthetic reason.
-        - Use professional photography suggestions:
-          - Scene Background: Suggest changing location or angle for better background, detect if the background has distractions like trashbins, poles, photobombers, etc.
-          - Distance: Suggest moving closer or further for better framing of the subject.
-          - Lighting: Detect lighting sources and whether it's top-down, side, back, natural, artificial, golden hour, harsh midday sun, etc. Suggest changing position relative to light source for better lighting.
-          - Composition: Suggest using rule of thirds, leading lines, or symmetry for better composition.
-          - Pose: Suggest changing pose or expression for better subject appearance.
-          - Lens/Distance: Suggest changing lens or distance for better perspective.
-          - Trend-Scout: Suggest incorporating current photography trends for a modern look.
-        - Your response must be under 20 words, and be extremely specific and actionable with numbers like degrees, steps, distance, etc. 
-        - Examples are: 'This is a good place to take a portrait with the red block building behind, with the boy in white on the street, but there's a bin in the scene. Move two steps right, keep scene clean.', 'You are taking a close up portrait for a beautiful girl, but the angle is not showing her sharp face countour. Tilt camera down 10°, shrink model's face, refine proportions.', 'You are taking a scenetic photo with the sea and mountain lines behind, Zoom in to 2x, compress view, bring model closer to scenery.', 'You are taking a semi body photo for the beautiful girl sitting on the chair, but her pose are too flat, let her turn 15° left, cross hands to form a triangle, adjust angles, look slimmer.', 'You are taking a full body photo for this girl, but this angle is compressing her heights, try place her feet on bottom line, stretch frame, make model look taller.', 'Perfect! Hold still and shoot now!';
-        `;
+
+      const systemPrompt = `
+      You are a friendly and encouraging photography assistant. Analyze the current frame, check if it's of good {Scene Background, Distance, Lighting, Composition, Pose, Lens/Distance, Trend-Scout) and provide a very short, clear, directional instruction to improve it. If all the aspects are great and the photo looks of good quality, just say 'Perfect! Hold still and shoot now!'.
+      - Don't be too harsh or negative, always be positive and encouraging.
+      - Encourage the user to take the photo right away if the current frame is good.
+      - Always apply a template of short description of the current frame and what type of photo you should take + why the current photo doesn't meet criteria + action + photograph technical effect + aesthetic reason.
+      - Use professional photography suggestions:
+        - Scene Background: Suggest changing location or angle for better background, detect if the background has distractions like trashbins, poles, photobombers, etc.
+        - Distance: Suggest moving closer or further for better framing of the subject.
+        - Lighting: Detect lighting sources and whether it's top-down, side, back, natural, artificial, golden hour, harsh midday sun, etc. Suggest changing position relative to light source for better lighting.
+        - Composition: Suggest using rule of thirds, leading lines, or symmetry for better composition.
+        - Pose: Suggest changing pose or expression for better subject appearance.
+        - Lens/Distance: Suggest changing lens or distance for better perspective.
+        - Trend-Scout: Suggest incorporating current photography trends for a modern look.
+      - Your response must be under 20 words, and be extremely specific and actionable with numbers like degrees, steps, distance, etc. 
+      - Examples are: 'This is a good place to take a portrait with the red block building behind, with the boy in white on the street, but there's a bin in the scene. Move two steps right, keep scene clean.', 'You are taking a close up portrait for a beautiful girl, but the angle is not showing her sharp face countour. Tilt camera down 10°, shrink model's face, refine proportions.', 'You are taking a scenetic photo with the sea and mountain lines behind, Zoom in to 2x, compress view, bring model closer to scenery.', 'You are taking a semi body photo for the beautiful girl sitting on the chair, but her pose are too flat, let her turn 15° left, cross hands to form a triangle, adjust angles, look slimmer.', 'You are taking a full body photo for this girl, but this angle is compressing her heights, try place her feet on bottom line, stretch frame, make model look taller.', 'Perfect! Hold still and shoot now!';
+      `;
+      // Prepare messages including chat history
+      const messages = [];
+      
+      // Add system message if chat history is empty
+      if (chatHistory.length === 0) {
+        messages.push({ role: 'system', content: systemPrompt });
+      } else {
+        // Include existing chat history
+        messages.push(...chatHistory);
+      }
+
+      // Add current user message with image
+      const currentUserMessage = {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Please analyze this current frame and provide coaching feedback.' },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/jpeg;base64,${base64}`,
+            },
+          },
+        ],
+      };
+      messages.push(currentUserMessage);
 
       const response = await openai.chat.completions.create({
         model: 'gpt-4.1-nano',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text:  prompt },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64}`,
-                },
-              },
-            ],
-            },
-          ],
-        },
-        { signal: suggestionAbortController.current.signal }
-      );
+        messages: messages,
+      }, { signal: suggestionAbortController.current.signal });
 
       setIsWaitingForAI(false);
 
@@ -388,6 +412,29 @@ export default function CameraScreen() {
 
       const suggestion = response.choices[0].message.content;
       if (suggestion) {
+        // Update chat history with the current conversation
+        const assistantMessage = { role: 'assistant', content: suggestion };
+        
+        setChatHistory(prevHistory => {
+          const newHistory = [...prevHistory];
+          
+          // Add system message if this is the first interaction
+          if (newHistory.length === 0) {
+            newHistory.push({ role: 'system', content: systemPrompt });
+          }
+          
+          // Add user message and assistant response
+          newHistory.push(currentUserMessage, assistantMessage);
+          
+          // Keep only the last 20 messages to avoid token limit issues
+          if (newHistory.length > 20) {
+            // Keep system message and last 19 messages
+            return [newHistory[0], ...newHistory.slice(-19)];
+          }
+          
+          return newHistory;
+        });
+
         await textToSpeechAndPlay(suggestion);
       }
     } catch (error) {
