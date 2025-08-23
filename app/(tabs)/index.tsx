@@ -26,9 +26,17 @@ export default function CameraScreen() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isGeneratingWelcomeMessage, setIsGeneratingWelcomeMessage] = useState(false);
+  const hasPlayedWelcomeMessage = useRef(false);
 
   useEffect(() => {
     (async () => {
+      await requestAudioPermission();
+
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+      });
+
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setErrorMsg('Permission to access location was denied');
@@ -39,12 +47,6 @@ export default function CameraScreen() {
       setLocation(location);
       getAddressFromCoordinates(location.coords.latitude, location.coords.longitude);
     })();
-
-    requestAudioPermission();
-
-    Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-    });
   }, []);
 
   async function requestAudioPermission() {
@@ -61,13 +63,45 @@ export default function CameraScreen() {
       );
       const json = await response.json();
       if (json.results && json.results[0]) {
-        setAddress(json.results[0].formatted_address);
+        const fullAddress = json.results[0].formatted_address;
+        setAddress(fullAddress);
+        if (!hasPlayedWelcomeMessage.current) {
+          generateAndPlayWelcomeMessage(fullAddress);
+          hasPlayedWelcomeMessage.current = true;
+        }
       } else {
         setErrorMsg('Address not found');
       }
     } catch (error) {
       console.error(error);
       setErrorMsg('Failed to fetch address');
+    }
+  }
+
+  async function generateAndPlayWelcomeMessage(currentAddress: string) {
+    if (isGeneratingWelcomeMessage) return;
+
+    setIsGeneratingWelcomeMessage(true);
+    try {
+      const prompt = `You are a photography assistant. The user is currently at ${currentAddress}. Greet them and suggest a few interesting photo opportunities or beautiful scenes nearby. Keep your response concise and friendly, under 30 words. For example: 'Welcome to the Eiffel Tower! Try capturing it from the Champ de Mars for a classic shot.'`;
+
+      console.log('Calling GPT for welcome message...');
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4.1-nano',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 200,
+      });
+
+      const message = response.choices[0].message.content;
+      console.log('Received welcome message from GPT:', message);
+
+      if (message) {
+        await textToSpeechAndPlay(message);
+      }
+    } catch (error) {
+      console.error('Error generating welcome message:', error);
+    } finally {
+      setIsGeneratingWelcomeMessage(false);
     }
   }
 
@@ -173,7 +207,16 @@ export default function CameraScreen() {
       });
 
       const arrayBuffer = await mp3.arrayBuffer();
-      const base64Audio = base64.encode(String.fromCharCode.apply(null, new Uint8Array(arrayBuffer) as any));
+      
+      // Convert ArrayBuffer to Base64 without stack overflow
+      let binary = '';
+      const bytes = new Uint8Array(arrayBuffer);
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64Audio = base64.encode(binary);
+
       const speechFile = FileSystem.cacheDirectory + 'speech.mp3';
       await FileSystem.writeAsStringAsync(speechFile, base64Audio, { encoding: FileSystem.EncodingType.Base64 });
 
