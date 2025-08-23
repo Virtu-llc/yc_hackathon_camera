@@ -79,24 +79,44 @@ export default function CameraScreen() {
   }
 
   async function generateAndPlayWelcomeMessage(currentAddress: string) {
-    if (isGeneratingWelcomeMessage) return;
+    if (isGeneratingWelcomeMessage || !cameraRef.current) return;
 
     setIsGeneratingWelcomeMessage(true);
     try {
-      const prompt = `You are a photography assistant. The user is currently at ${currentAddress}. Greet them and suggest a few interesting photo opportunities or beautiful scenes nearby. Keep your response concise and friendly, under 30 words. For example: 'Welcome to the Eiffel Tower! Try capturing it from the Champ de Mars for a classic shot.'`;
-
-      console.log('Calling GPT for welcome message...');
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4.1-nano',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 200,
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.4,
+        base64: true,
       });
 
-      const message = response.choices[0].message.content;
-      console.log('Received welcome message from GPT:', message);
+      if (photo.base64) {
+        const prompt = `You are a photography assistant. The user is currently at ${currentAddress}. Based on the provided image, greet them and suggest a few interesting photo opportunities or beautiful scenes nearby. Keep your response concise and friendly, under 30 words. For example: 'Welcome to the Eiffel Tower! Try capturing it from the Champ de Mars for a classic shot.'`;
 
-      if (message) {
-        await textToSpeechAndPlay(message);
+        console.log('Calling GPT for welcome message with image...');
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4.1-nano',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:image/jpeg;base64,${photo.base64}`,
+                  },
+                },
+              ],
+            },
+          ],
+          max_tokens: 200,
+        });
+
+        const message = response.choices[0].message.content;
+        console.log('Received welcome message from GPT:', message);
+
+        if (message) {
+          await textToSpeechAndPlay(message);
+        }
       }
     } catch (error) {
       console.error('Error generating welcome message:', error);
