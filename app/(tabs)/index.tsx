@@ -7,7 +7,7 @@ import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import OpenAI from 'openai';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Button, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Button, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { GOOGLE_MAPS_API_KEY, OPENAI_API_KEY } from '../../config';
 
 const openai = new OpenAI({
@@ -29,6 +29,16 @@ export default function CameraScreen() {
   const [isGeneratingWelcomeMessage, setIsGeneratingWelcomeMessage] = useState(false);
   const [touristAttractions, setTouristAttractions] = useState<string[]>([]);
   const hasPlayedWelcomeMessage = useRef(false);
+  const [isWelcomeMessagePlaying, setIsWelcomeMessagePlaying] = useState(true);
+
+  // For auto-coach functionality
+  const [lastImageSize, setLastImageSize] = useState<number | null>(null);
+  const [stableCount, setStableCount] = useState(0);
+  const [isSuggestionTaskRunning, setIsSuggestionTaskRunning] = useState(false);
+  const isTaskCancelled = useRef(false);
+  const suggestionAbortController = useRef<AbortController | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
 
   useEffect(() => {
     (async () => {
@@ -58,7 +68,75 @@ export default function CameraScreen() {
     }
   }, [address, touristAttractions]);
 
+  useEffect(() => {
+    // Do not start stability check until the welcome message has finished playing.
+    if (isWelcomeMessagePlaying) {
+      return;
+    }
+
+    const checkStability = async () => {
+      // Re-check conditions that might have changed, like another suggestion starting.
+      if (!cameraRef.current || isSuggestionTaskRunning || isProcessing || isWaitingForAI || isGeneratingWelcomeMessage) {
+        return;
+      }
+
+      try {
+        const photo = await cameraRef.current.takePictureAsync({ quality: 0.1, skipProcessing: true });
+        const fileInfo = await FileSystem.getInfoAsync(photo.uri, { size: true });
+        await FileSystem.deleteAsync(photo.uri);
+
+        if (fileInfo.exists && typeof fileInfo.size === 'number') {
+          const currentSize = fileInfo.size;
+          
+          setLastImageSize(lastSize => {
+            if (lastSize !== null) {
+              const sizeDifference = Math.abs(currentSize - lastSize) / lastSize;
+              if (sizeDifference < 0.05) { // 5% threshold for similarity
+                setStableCount(prev => prev + 1);
+              } else {
+                setStableCount(0);
+                if (isSuggestionTaskRunning) {
+                    isTaskCancelled.current = true;
+                    if (suggestionAbortController.current) {
+                        suggestionAbortController.current.abort();
+                    }
+                    if (soundRef.current) {
+                        soundRef.current.stopAsync().then(() => {
+                          soundRef.current?.unloadAsync();
+                          soundRef.current = null;
+                        });
+                    }
+                    setIsSuggestionTaskRunning(false);
+                    console.log('Task cancelled due to camera movement.');
+                }
+              }
+            }
+            return currentSize;
+          });
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('permission')) {
+          console.log('Camera permission not granted yet, skipping stability check.');
+        } else {
+          console.error("Error checking stability:", error);
+        }
+      }
+    };
+
+    const intervalId = setInterval(checkStability, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [isWelcomeMessagePlaying, isSuggestionTaskRunning, isProcessing, isWaitingForAI, isGeneratingWelcomeMessage]);
+
+  useEffect(() => {
+    if (stableCount >= 2 && !isSuggestionTaskRunning) {
+      console.log('Camera is stable. Triggering suggestion task.');
+      handleCoachPress();
+    }
+  }, [stableCount, isSuggestionTaskRunning]);
+
   async function requestAudioPermission() {
+    console.log('Requesting audio recording permissions...');
     const { status } = await Audio.requestPermissionsAsync();
     if (status !== 'granted') {
       alert('Sorry, we need audio permissions to play advice!');
@@ -171,7 +249,7 @@ export default function CameraScreen() {
   async function handleCapturePhoto() {
     if (cameraRef.current) {
       try {
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         
         const photo = await cameraRef.current.takePictureAsync({
           quality: 1,
@@ -193,84 +271,90 @@ export default function CameraScreen() {
     }
   }
 
-  async function handleCoachPress() {
-    if (!cameraRef.current || isProcessing) {
-      return;
-    }
+  const handleCoachPress = async () => {
+    if (isProcessing) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    setIsProcessing(true);
-    setIsWaitingForAI(true);
+    setIsSuggestionTaskRunning(true);
+    isTaskCancelled.current = false;
+    suggestionAbortController.current = new AbortController();
+
     try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.4,
-        base64: true,
-      });
+      const photo = await cameraRef.current?.takePictureAsync({ quality: 0.5, base64: true });
+      if (!photo || isTaskCancelled.current) return;
 
-      if (photo.base64) {
-        const prompt = `You are a photography coach. Analyze this image and provide a very short, clear, directional instruction to improve it. Your response must be under 10 words. For example: 'Move slightly right.' or 'Tilt camera down.'`;
+      const base64 = photo.base64;
+      if (!base64 || isTaskCancelled.current) return;
 
-        console.log('Calling GPT for advice...');
-        const response = await openai.chat.completions.create({
-          model: 'gpt-4.1-nano',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: prompt },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/jpeg;base64,${photo.base64}`,
-                  },
+      setIsWaitingForAI(true);
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'As a photography coach, what is a better way to frame this photo? Provide a short, coach-like suggestion. Consider composition, lighting, and subject matter.' },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${base64}`,
                 },
-              ],
-            },
-          ],
-          max_tokens: 100,
-        });
+              },
+            ],
+          },
+        ],
+      }, { signal: suggestionAbortController.current.signal });
 
-        const newAdvice = response.choices[0].message.content;
-        console.log('Received advice from GPT:', newAdvice);
-        setIsWaitingForAI(false);
+      setIsWaitingForAI(false);
 
-        if (newAdvice) {
-          await textToSpeechAndPlay(newAdvice);
-        }
-      } else {
-        setIsWaitingForAI(false);
+      if (isTaskCancelled.current) return;
+
+      const suggestion = response.choices[0].message.content;
+      if (suggestion) {
+        await textToSpeechAndPlay(suggestion);
       }
     } catch (error) {
-      console.error('Error during coaching process:', error);
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('OpenAI request was aborted.');
+      } else {
+        console.error('Error with Coach:', error);
+      }
       setIsWaitingForAI(false);
     } finally {
-      setIsProcessing(false);
+      setIsSuggestionTaskRunning(false);
+      setStableCount(0);
+      setLastImageSize(null);
     }
-  }
+  };
+
 
   async function textToSpeechAndPlay(text: string): Promise<void> {
-    console.log('Generating speech for:', text);
     try {
-      const mp3 = await openai.audio.speech.create({
-        model: 'tts-1',
-        voice: 'alloy',
+      const response = await openai.audio.speech.create({
+        model: "tts-1",
+        voice: "alloy",
         input: text,
       });
 
-      const arrayBuffer = await mp3.arrayBuffer();
-      
-      // Convert ArrayBuffer to Base64 without stack overflow
+      const arrayBuffer = await response.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
       let binary = '';
-      const bytes = new Uint8Array(arrayBuffer);
-      const len = bytes.byteLength;
-      for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
+      uint8Array.forEach((byte) => {
+        binary += String.fromCharCode(byte);
+      });
       const base64Audio = base64.encode(binary);
 
       const speechFile = FileSystem.cacheDirectory + 'speech.mp3';
       await FileSystem.writeAsStringAsync(speechFile, base64Audio, { encoding: FileSystem.EncodingType.Base64 });
 
+      if (isTaskCancelled.current) {
+        console.log('TTS playback cancelled before starting.');
+        return;
+      }
+
       const { sound } = await Audio.Sound.createAsync({ uri: speechFile });
+      soundRef.current = sound;
 
       return new Promise((resolve, reject) => {
         sound.setOnPlaybackStatusUpdate(async (status) => {
@@ -278,13 +362,17 @@ export default function CameraScreen() {
             if (status.isLoaded) {
               if (status.didJustFinish) {
                 await sound.unloadAsync();
+                soundRef.current = null;
                 console.log('Sound unloaded.');
+                setIsWelcomeMessagePlaying(false);
                 resolve();
               }
             } else {
               if (status.error) {
                 console.error(`Playback Error: ${status.error}`);
                 await sound.unloadAsync();
+                soundRef.current = null;
+                setIsWelcomeMessagePlaying(false);
                 reject(new Error(status.error));
               }
             }
@@ -293,10 +381,18 @@ export default function CameraScreen() {
             reject(e);
           }
         });
-        sound.playAsync().catch(reject);
+
+        if (!isTaskCancelled.current) {
+          sound.playAsync().catch(reject);
+        } else {
+          sound.unloadAsync();
+          soundRef.current = null;
+          resolve();
+        }
       });
     } catch (error) {
       console.error('Failed to generate or play speech', error);
+      setIsWelcomeMessagePlaying(false);
       throw error;
     }
   }
@@ -350,13 +446,6 @@ export default function CameraScreen() {
 
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.shutterButton} onPress={handleCapturePhoto} />
-        <TouchableOpacity style={styles.coachButton} onPress={handleCoachPress} disabled={isProcessing}>
-          {isProcessing ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (
-            <Text style={styles.coachButtonText}>Coach</Text>
-          )}
-        </TouchableOpacity>
       </View>
 
       <Animated.View style={[styles.flash, { opacity: flashOpacity }]} />
@@ -435,18 +524,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderWidth: 4,
     borderColor: '#ccc',
-  },
-  coachButton: {
-    position: 'absolute',
-    right: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  coachButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
   },
   loadingOverlay: {
     position: 'absolute',
