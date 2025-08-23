@@ -29,13 +29,13 @@ export default function GalleryScreen() {
 }
 
 const screenWidth = Dimensions.get('window').width;
-const imageSize = (screenWidth - 40) / 3; // 10 padding on each side of the screen, 10 padding between images
+const imageSize = (screenWidth - 30) / 3; // 15 padding on each side, no gap between images
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#000',
-        paddingHorizontal: 10,
+        paddingHorizontal: 15,
     },
     attractionSection: {
         marginBottom: 20,
@@ -44,20 +44,19 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 20,
         fontWeight: 'bold',
-        marginBottom: 10,
-        marginLeft: 5,
+        marginBottom: 15,
         marginTop: 20,
     },
     imageGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        justifyContent: 'flex-start',
+        justifyContent: 'space-between',
     },
     image: {
         width: imageSize,
         height: imageSize,
-        margin: 5,
-        borderRadius: 5,
+        marginBottom: 2,
+        borderRadius: 3,
         backgroundColor: 'grey',
     },
 });
