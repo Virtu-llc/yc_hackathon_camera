@@ -8,7 +8,7 @@ import * as Location from 'expo-location';
 import OpenAI from 'openai';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Button, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { GOOGLE_MAPS_API_KEY, OPENAI_API_KEY } from '../../config';
+import { GOOGLE_MAPS_API_KEY, GOOGLE_SEARCH_API_KEY, GOOGLE_SEARCH_CX, OPENAI_API_KEY } from '../../config';
 
 const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
@@ -30,6 +30,7 @@ export default function CameraScreen() {
   const [touristAttractions, setTouristAttractions] = useState<string[]>([]);
   const hasPlayedWelcomeMessage = useRef(false);
   const [isWelcomeMessagePlaying, setIsWelcomeMessagePlaying] = useState(true);
+  const [hasSearchedImages, setHasSearchedImages] = useState(false);
 
   // For auto-coach functionality
   const [lastImageSize, setLastImageSize] = useState<number | null>(null);
@@ -66,7 +67,11 @@ export default function CameraScreen() {
       generateAndPlayWelcomeMessage(address, touristAttractions);
       hasPlayedWelcomeMessage.current = true;
     }
-  }, [address, touristAttractions]);
+    if (touristAttractions.length > 0 && !hasSearchedImages) {
+      searchInstagramImages(touristAttractions);
+      setHasSearchedImages(true);
+    }
+  }, [address, touristAttractions, hasSearchedImages]);
 
   useEffect(() => {
     // Do not start stability check until the welcome message has finished playing.
@@ -140,6 +145,28 @@ export default function CameraScreen() {
     const { status } = await Audio.requestPermissionsAsync();
     if (status !== 'granted') {
       alert('Sorry, we need audio permissions to play advice!');
+    }
+  }
+
+  async function searchInstagramImages(attractions: string[]) {
+    console.log('Searching for Instagram images of:', attractions);
+    for (const attraction of attractions) {
+      try {
+        const query = `"${attraction}"`;
+        const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_SEARCH_API_KEY}&cx=${GOOGLE_SEARCH_CX}&q=${encodeURIComponent(query)}&searchType=image&siteSearch=instagram.com&fields=items(link)`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.items) {
+          const imageUrls = data.items.map((item: any) => item.link);
+          console.log(`Image URLs for ${attraction}:`, imageUrls);
+        } else {
+          console.log(`No images found for ${attraction} on Instagram.`);
+        }
+      } catch (error) {
+        console.error(`Failed to search images for ${attraction}`, error);
+      }
     }
   }
 
