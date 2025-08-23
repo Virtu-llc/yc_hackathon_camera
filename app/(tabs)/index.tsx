@@ -27,6 +27,7 @@ export default function CameraScreen() {
   const [address, setAddress] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isGeneratingWelcomeMessage, setIsGeneratingWelcomeMessage] = useState(false);
+  const [touristAttractions, setTouristAttractions] = useState<string[]>([]);
   const hasPlayedWelcomeMessage = useRef(false);
 
   useEffect(() => {
@@ -46,13 +47,37 @@ export default function CameraScreen() {
       let location = await Location.getCurrentPositionAsync({});
       setLocation(location);
       getAddressFromCoordinates(location.coords.latitude, location.coords.longitude);
+      getTouristAttractions(location.coords.latitude, location.coords.longitude);
     })();
   }, []);
+
+  useEffect(() => {
+    if (address && touristAttractions.length > 0 && !hasPlayedWelcomeMessage.current) {
+      generateAndPlayWelcomeMessage(address, touristAttractions);
+      hasPlayedWelcomeMessage.current = true;
+    }
+  }, [address, touristAttractions]);
 
   async function requestAudioPermission() {
     const { status } = await Audio.requestPermissionsAsync();
     if (status !== 'granted') {
       alert('Sorry, we need audio permissions to play advice!');
+    }
+  }
+
+  async function getTouristAttractions(latitude: number, longitude: number) {
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&radius=1500&type=tourist_attraction&key=${GOOGLE_MAPS_API_KEY}`
+      );
+      const json = await response.json();
+      if (json.results) {
+        const attractions = json.results.map((place: any) => place.name).slice(0, 5);
+        setTouristAttractions(attractions);
+        console.log('Tourist Attractions:', attractions);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tourist attractions', error);
     }
   }
 
@@ -65,10 +90,6 @@ export default function CameraScreen() {
       if (json.results && json.results[0]) {
         const fullAddress = json.results[0].formatted_address;
         setAddress(fullAddress);
-        if (!hasPlayedWelcomeMessage.current) {
-          generateAndPlayWelcomeMessage(fullAddress);
-          hasPlayedWelcomeMessage.current = true;
-        }
       } else {
         setErrorMsg('Address not found');
       }
@@ -78,7 +99,7 @@ export default function CameraScreen() {
     }
   }
 
-  async function generateAndPlayWelcomeMessage(currentAddress: string) {
+  async function generateAndPlayWelcomeMessage(currentAddress: string, attractions: string[]) {
     if (isGeneratingWelcomeMessage || !cameraRef.current) return;
 
     setIsGeneratingWelcomeMessage(true);
@@ -89,7 +110,11 @@ export default function CameraScreen() {
       });
 
       if (photo.base64) {
-        const prompt = `You are a photography assistant. The user is currently at ${currentAddress}. Based on the provided image, greet them and suggest a few interesting photo opportunities or beautiful scenes nearby. Keep your response concise and friendly, under 30 words. For example: 'Welcome to the Eiffel Tower! Try capturing it from the Champ de Mars for a classic shot.'`;
+        let attractionsText = '';
+        if (attractions.length > 0) {
+          attractionsText = `Nearby tourist attractions include: ${attractions.join(', ')}.`;
+        }
+        const prompt = `You are a photography assistant. The user is currently at ${currentAddress}. ${attractionsText} Based on the provided image, greet them and suggest a few interesting photo opportunities or beautiful scenes nearby. Keep your response concise and friendly, under 30 words. For example: 'Welcome to the Eiffel Tower! Try capturing it from the Champ de Mars for a classic shot.'`;
 
         console.log('Calling GPT for welcome message with image...');
         const response = await openai.chat.completions.create({
