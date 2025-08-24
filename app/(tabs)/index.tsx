@@ -254,8 +254,8 @@ export default function CameraScreen() {
         - Be specific about the current location the user is at, and the detailed description of the current frame.
         - Be enthusiastic and encouraging, appreciating the users's current setting and outfit.
         - Encourage the user to start taking photos right away at the current location.
-        - Keep your response concise and friendly, focus on the current frame, under 100 words.
-        - For example: 'Such an iconic cloudy day at the Eiffel Tower! You are right in front of the tower, but a bit far from it, with your hat, scarf, and black coat, you’re perfectly styled for moody cinematic photos that glow in soft light. Based on this vibe, you can capture around 4 breathtaking shots within the next 20 minutes—Trocadéro (5 min walk), Avenue de Camoëns (just 2 min away), Bir-Hakeim Bridge (10 min stroll), and Quai Branly by the Seine (3 min). Let's start with your current location! Can you start pointing your camera at the gorgeous subject?'`;
+        - Keep your response concise and friendly, focus on the current frame, **UNDER 50 WORDS**.
+        - For example: 'Wow, what a perfect moody Eiffel Tower day! With your white dress and this cloudy soft light, you’re glowing. In just 20 minutes we can hit four killer spots—Trocadéro, Avenue de Camoëns, Bir-Hakeim, and Quai Branly nearby. Let’s start right here—ready to lift that camera?`;
 
         console.log("Calling GPT for welcome message with image...");
 
