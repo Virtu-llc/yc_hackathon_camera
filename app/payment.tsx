@@ -70,7 +70,7 @@ export default function PaymentScreen() {
         </View>
 
         <View style={styles.pricingContainer}>
-          <Text style={styles.priceText}>Lift time access fee</Text>
+          <Text style={styles.priceText}>Life time access fee</Text>
           <Text style={styles.priceAmount}>$5.00</Text>
           <Text style={styles.priceDescription}>
             Unlock lifetime access to all premium features
