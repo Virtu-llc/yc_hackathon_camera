@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { Dimensions, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-export default function GalleryScreen() {
+export default function InsposScreen() {
     const { images: imagesString } = useLocalSearchParams<{ images: string }>();
     const images: { [key: string]: { imageUrl: string; instagramLink: string }[] } = imagesString ? JSON.parse(imagesString) : {};
 
@@ -12,6 +12,11 @@ export default function GalleryScreen() {
 
     return (
         <ScrollView style={styles.container}>
+            <View style={styles.headerContainer}>
+                <Text style={styles.headerText}>
+                    Popular Photo Shootings near by selected and featured by Foxos, your AI powered photograph coaching agent
+                </Text>
+            </View>
             {Object.keys(images).map(attraction => (
                 <View key={attraction} style={styles.attractionSection}>
                     <Text style={styles.attractionTitle}>{attraction}</Text>
@@ -36,6 +41,18 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#000',
         paddingHorizontal: 15,
+    },
+    headerContainer: {
+        marginTop: 20,
+        marginBottom: 30,
+        paddingHorizontal: 10,
+    },
+    headerText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: '600',
+        textAlign: 'center',
+        lineHeight: 24,
     },
     attractionSection: {
         marginBottom: 20,
