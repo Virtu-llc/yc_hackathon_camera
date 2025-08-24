@@ -2,12 +2,12 @@ import { usePayment } from '@/components/PaymentProvider';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export default function PaymentScreen() {
@@ -57,7 +57,7 @@ export default function PaymentScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Welcome to AesthetIQ</Text>
+        <Text style={styles.title}>Welcome to Foxos</Text>
         <Text style={styles.subtitle}>
           Your AI Photography Assistant
         </Text>
@@ -70,7 +70,7 @@ export default function PaymentScreen() {
         </View>
 
         <View style={styles.pricingContainer}>
-          <Text style={styles.priceText}>One-time access fee</Text>
+          <Text style={styles.priceText}>Lift time access fee</Text>
           <Text style={styles.priceAmount}>$5.00</Text>
           <Text style={styles.priceDescription}>
             Unlock lifetime access to all premium features

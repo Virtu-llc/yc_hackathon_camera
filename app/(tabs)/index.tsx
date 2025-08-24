@@ -312,7 +312,7 @@ export default function CameraScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         const photo = await cameraRef.current.takePictureAsync({
-          quality: 1,
+          quality: 0.5,
           base64: false,
         });
 
@@ -348,7 +348,7 @@ export default function CameraScreen() {
 
     try {
       const photo = await cameraRef.current?.takePictureAsync({
-        quality: 0.5,
+        quality: 0.4,
         base64: true,
       });
       if (!photo || isTaskCancelled.current) return;
