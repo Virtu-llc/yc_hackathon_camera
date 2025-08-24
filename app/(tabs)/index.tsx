@@ -245,7 +245,7 @@ export default function CameraScreen() {
             ", "
           )}.`;
         }
-  
+
         const prompt = `
         You are a photography assistant. The user is currently at ${currentAddress}. Here are the attractions nearby: ${attractionsText}.
         Based on the provided image, reason about the EXACT location the user is at, what the user is wearing, how's the weather, greet them and suggest a few interesting photo opportunities or beautiful scenes nearby, starting from the current place they are at. 
@@ -254,8 +254,8 @@ export default function CameraScreen() {
         - Be specific about the current location the user is at, and the detailed description of the current frame.
         - Be enthusiastic and encouraging, appreciating the users's current setting and outfit.
         - Encourage the user to start taking photos right away at the current location.
-        - Keep your response concise and friendly, under 100 words.
-        - For example: 'Such an iconic cloudy day at the Eiffel Tower! You are right in front of the tower, but a bit far from it, with your hat, scarf, and black coat, you’re perfectly styled for moody cinematic photos that glow in soft light. Based on this vibe, you can capture around 4 breathtaking shots within the next 20 minutes—Trocadéro (5 min walk), Avenue de Camoëns (just 2 min away), Bir-Hakeim Bridge (10 min stroll), and Quai Branly by the Seine (3 min). These four stops offer sweeping panoramas, chic Parisian streets, dramatic cinematic lines, and soft river reflections, all in a short loop. Let's start with your current location! Can you start pointing your camera at the gorgeous subject?'`;
+        - Keep your response concise and friendly, focus on the current frame, **UNDER 50 WORDS**.
+        - For example: 'Wow, what a perfect moody Eiffel Tower day! With your white dress and this cloudy soft light, you’re glowing. In just 20 minutes we can hit four killer spots—Trocadéro, Avenue de Camoëns, Bir-Hakeim, and Quai Branly nearby. Let’s start right here—ready to lift that camera?`;
 
         console.log("Calling GPT for welcome message with image...");
 
@@ -357,13 +357,12 @@ export default function CameraScreen() {
 
       setIsWaitingForAI(true);
 
-
-
       const systemPrompt = `
       You are a friendly and encouraging photography assistant. Analyze the current frame, check if it's of good {Scene Background, Distance, Lighting, Composition, Pose, Lens/Distance, Trend-Scout) and provide a very short, clear, directional instruction to improve it. If all the aspects are great and the photo looks of good quality, just say 'Perfect! Hold still and shoot now!'.
       - Don't be too harsh or negative, always be positive and encouraging.
       - Encourage the user to take the photo right away if the current frame is good.
       - Always apply a template of short description of the current frame and what type of photo you should take + why the current photo doesn't meet criteria + action + photograph technical effect + aesthetic reason.
+      - Never suggest back and forth actions, or repetitive actions, such as "move left two steps" then "move right two steps". 
       - Use professional photography suggestions:
         - Scene Background: Suggest changing location or angle for better background, detect if the background has distractions like trashbins, poles, photobombers, etc.
         - Distance: Suggest moving closer or further for better framing of the subject.
@@ -377,10 +376,10 @@ export default function CameraScreen() {
       `;
       // Prepare messages including chat history
       const messages = [];
-      
+
       // Add system message if chat history is empty
       if (chatHistory.length === 0) {
-        messages.push({ role: 'system', content: systemPrompt });
+        messages.push({ role: "system", content: systemPrompt });
       } else {
         // Include existing chat history
         messages.push(...chatHistory);
@@ -388,11 +387,14 @@ export default function CameraScreen() {
 
       // Add current user message with image
       const currentUserMessage = {
-        role: 'user',
+        role: "user",
         content: [
-          { type: 'text', text: 'Please analyze this current frame and provide coaching feedback.' },
           {
-            type: 'image_url',
+            type: "text",
+            text: "Please analyze this current frame and provide coaching feedback.",
+          },
+          {
+            type: "image_url",
             image_url: {
               url: `data:image/jpeg;base64,${base64}`,
             },
@@ -401,10 +403,13 @@ export default function CameraScreen() {
       };
       messages.push(currentUserMessage);
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4.1-nano',
-        messages: messages,
-      }, { signal: suggestionAbortController.current.signal });
+      const response = await openai.chat.completions.create(
+        {
+          model: "gpt-4.1-nano",
+          messages: messages,
+        },
+        { signal: suggestionAbortController.current.signal }
+      );
 
       setIsWaitingForAI(false);
 
@@ -413,25 +418,25 @@ export default function CameraScreen() {
       const suggestion = response.choices[0].message.content;
       if (suggestion) {
         // Update chat history with the current conversation
-        const assistantMessage = { role: 'assistant', content: suggestion };
-        
-        setChatHistory(prevHistory => {
+        const assistantMessage = { role: "assistant", content: suggestion };
+
+        setChatHistory((prevHistory) => {
           const newHistory = [...prevHistory];
-          
+
           // Add system message if this is the first interaction
           if (newHistory.length === 0) {
-            newHistory.push({ role: 'system', content: systemPrompt });
+            newHistory.push({ role: "system", content: systemPrompt });
           }
-          
+
           // Add user message and assistant response
           newHistory.push(currentUserMessage, assistantMessage);
-          
+
           // Keep only the last 20 messages to avoid token limit issues
           if (newHistory.length > 20) {
             // Keep system message and last 19 messages
             return [newHistory[0], ...newHistory.slice(-19)];
           }
-          
+
           return newHistory;
         });
 
