@@ -52,7 +52,8 @@
           "cameraPermission": "Allow AesthetIQ to access your camera to take photos."
         }
       ],
-      "react-native-vision-camera"
+      "react-native-vision-camera",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
