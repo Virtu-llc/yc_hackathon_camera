@@ -255,7 +255,7 @@ export default function CameraScreen() {
         - Be enthusiastic and encouraging, appreciating the users's current setting and outfit.
         - If there's no people or subject in the current frame, please encourage the user to find a subject to photograph, don't mention outfit.
         - Encourage the user to start taking photos right away at the current location.
-        - Keep your response concise and friendly, under 100 words.
+        - Keep your response concise and friendly, under 50 words.
         - For example: 'Such an iconic cloudy day at the Eiffel Tower! You are right in front of the tower, but a bit far from it, with your hat, scarf, and black coat, you’re perfectly styled for moody cinematic photos that glow in soft light. Based on this vibe, you can capture around 4 breathtaking shots within the next 20 minutes—Trocadéro (5 min walk), Avenue de Camoëns (just 2 min away), Bir-Hakeim Bridge (10 min stroll), and Quai Branly by the Seine (3 min). These four stops offer sweeping panoramas, chic Parisian streets, dramatic cinematic lines, and soft river reflections, all in a short loop. Let's start with your current location! Can you start pointing your camera at the gorgeous subject?'`;
 
         console.log("Calling GPT for welcome message with image...");

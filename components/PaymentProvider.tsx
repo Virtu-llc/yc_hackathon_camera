@@ -34,8 +34,9 @@ export function PaymentProvider({ children }: { children: React.ReactNode }) {
   const checkPaymentStatus = async () => {
     try {
       setIsLoading(true);
-      const paymentStatus = await SecureStore.getItemAsync('payment_completed');
-      setHasPayment(paymentStatus === 'true');
+      // Always require payment - clear any stored payment status
+      await SecureStore.deleteItemAsync('payment_completed');
+      setHasPayment(false);
       
       // Also generate/get user ID
       const currentUserId = await generateUserId();
@@ -51,7 +52,8 @@ export function PaymentProvider({ children }: { children: React.ReactNode }) {
   const simulatePayment = async () => {
     // Simulate payment processing for demo
     await new Promise(resolve => setTimeout(resolve, 2000));
-    await SecureStore.setItemAsync('payment_completed', 'true');
+    // Don't save payment status - user will need to pay again next time
+    // await SecureStore.setItemAsync('payment_completed', 'true');
     setHasPayment(true);
   };
 
